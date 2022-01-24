@@ -1,0 +1,29 @@
+resources:
+  - resources/stateful-set.yaml
+  - resources/service.yaml
+
+commonLabels:
+  instance: server1
+  app: project-zomboid
+
+configMapGenerator:
+  - name: config-template
+    files:
+      - config/template.ini
+      - config/template_SandboxVars.lua
+      - config/template_spawnregions.lua
+  - name: scripts
+    files:
+      - scripts/copy-template.sh
+      - scripts/stop-server.sh
+
+secretGenerator:
+  - name: server-env
+    envs:
+      - config/.env.dist
+
+images:
+  # Note that this image does not exist on DockerHub you'll have to build the Dockerfile yourself.
+  # You can also try an image from DockerHub, but you might have to change some paths around.
+  - name: pzserver
+    digest: <<this is just an example>>

@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zomboid
+spec:
+  replicas: 1
+  serviceName: zomboid
+  template:
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+        - name: rcon-dl
+          image: alpine
+          command:
+            - "/bin/ash"
+            - "-c"
+            - >
+              wget https://github.com/itzg/rcon-cli/releases/download/1.5.1/rcon-cli_1.5.1_linux_amd64.tar.gz -O /rcon/archive.tar.gz
+              && tar -C /rcon -zxvf /rcon/archive.tar.gz
+          volumeMounts:
+            - mountPath: /rcon
+              name: rcon-bin
+        - name: config-copy
+          image: alpine
+          command:
+            - '/bin/ash'
+            - '/scripts/copy-template.sh'
+          envFrom:
+            - secretRef:
+                name: server-env
+          volumeMounts:
+            - mountPath: /config-template
+              name: config-template
+            - mountPath: /server-data
+              name: server-data
+            - mountPath: /scripts
+              name: scripts
+      containers:
+        - name: zomboid
+          image: registry.timfennis.com/pzserver:latest
+          envFrom:
+            - secretRef:
+                name: server-env
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - '/bin/bash'
+                  - '/scripts/stop-server.sh'
+          livenessProbe:
+            tcpSocket:
+              port: 27015
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            tcpSocket:
+              port: 27015
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 120
+          ports:
+            - containerPort: 27015
+              protocol: TCP
+            - containerPort: 8766
+              protocol: UDP
+            - containerPort: 16261
+              protocol: UDP
+          volumeMounts:
+            - mountPath: /home/steam/Zomboid
+              name: server-data
+            - mountPath: /rcon
+              name: rcon-bin
+      volumes:
+        - name: config-template
+          configMap:
+            name: config-template
+        - name: rcon-bin
+          emptyDir: {}
+        - name: scripts
+          configMap:
+            name: scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: server-data
+      spec:
+        accessModes:
+          - ReadWriteMany
+        storageClassName: managed-nfs-storage
+        resources:
+          requests:
+            storage: 10Gi
+
